@@ -20,14 +20,14 @@ USE WAREHOUSE ANALYTICS_WH;
 -- ============================================================
 -- METHOD 1: COPY INTO (Recommended for Production)
 -- ============================================================
--- WHY: COPY INTO is Snowflake's primary bulk loading mechanism
--- Teaching: Think of it as "COPY data FROM stage INTO table"
---   - It's parallelized (reads multiple file parts simultaneously)
---   - It tracks which files have been loaded (prevents duplicates)
---   - It reports errors per row for debugging
+-- COPY INTO is Snowflake's primary bulk loading mechanism.
+-- It's parallelized (reads multiple file parts simultaneously),
+-- tracks which files have been loaded (prevents duplicates),
+-- and reports errors per row for debugging.
+-- ============================================================
 
--- ---- Step 1: Load into RAW table ----
--- WHY: Always load raw data first, then transform to clean table
+-- Step 1: Load into RAW table.
+-- Always load raw data first, then transform to clean table.
 COPY INTO RAW_WEEKLY_VIEWS (
     week,
     category,
@@ -41,9 +41,6 @@ COPY INTO RAW_WEEKLY_VIEWS (
 )
 FROM (
     SELECT
-        -- ---- Column Mapping ----
-        -- WHY: Explicit mapping prevents column order issues
-        -- Teaching: $1, $2, etc. refer to CSV columns in order
         $1::DATE        AS week,
         $2::VARCHAR     AS category,
         $3::INTEGER     AS weekly_rank,
@@ -55,17 +52,8 @@ FROM (
         $9::INTEGER     AS cumulative_weeks_in_top_10
     FROM @netflix_s3_stage
 )
--- ---- Error Handling Options ----
--- WHY: Control what happens when bad data is encountered
+-- ON_ERROR options: ABORT (stop on first error), CONTINUE (skip bad rows), SKIP_FILE
 ON_ERROR = 'CONTINUE'
--- Options:
---   ABORT      = Stop immediately on first error (safest)
---   CONTINUE   = Skip bad rows, continue loading (good for dev)
---   SKIP_FILE  = Skip entire file if any row has errors
-
--- ---- File Selection ----
--- WHY: Only load files matching this pattern
--- Teaching: Use this to load specific weeks without re-loading everything
 FILE_FORMAT = (
     TYPE = 'CSV'
     FIELD_OPTIONALLY_ENCLOSED_BY = '"'
@@ -74,22 +62,16 @@ FILE_FORMAT = (
     TRIM_SPACE = TRUE
     EMPTY_FIELD_AS_NULL = TRUE
 )
-
--- ---- Load Tracking ----
--- WHY: Forces a full reload — removes the "already loaded" marker
--- Teaching: Remove this line for incremental loads (only load new files)
+-- FORCE = TRUE forces a full reload. Remove for incremental loads (only load new files).
 FORCE = FALSE
--- Set to TRUE only when you want to reload all files
-
--- ---- Result ----
--- This will show: rows loaded, rows parsed, errors, etc.
 ;
 
 -- ============================================================
 -- Step 2: Load into CLEAN table (Transform from RAW)
 -- ============================================================
--- WHY: Now that raw data is loaded, transform and insert into production table
--- Teaching: This is the "T" in ELT (Extract, Load, Transform)
+-- Now that raw data is loaded, transform and insert into production table.
+-- This is the "T" in ELT (Extract, Load, Transform).
+-- ============================================================
 
 INSERT INTO NETFLIX_WEEKLY_VIEWS (
     week,
@@ -104,14 +86,11 @@ INSERT INTO NETFLIX_WEEKLY_VIEWS (
     _transformed_at
 )
 SELECT
-    -- ---- Direct mappings (same as raw) ----
     week,
     category,
     weekly_rank,
     show_title,
-    -- ---- Transformation: season_title ----
-    -- WHY: Convert 'N/A' to NULL for cleaner data
-    -- Teaching: NULL means "no value" which is more meaningful than a string
+    -- Convert 'N/A' / 'null' to NULL for cleaner data
     CASE
         WHEN season_title = 'N/A' THEN NULL
         WHEN season_title = 'null' THEN NULL
@@ -121,25 +100,21 @@ SELECT
     runtime,
     weekly_views,
     cumulative_weeks_in_top_10,
-
-    -- ---- Timestamp when transformation happened ----
     CURRENT_TIMESTAMP() AS _transformed_at
-
 FROM RAW_WEEKLY_VIEWS
--- ---- Deduplication ----
--- WHY: Prevent duplicate rows if data is loaded multiple times
--- Teaching: This pattern ensures each (week, category, rank) combo is unique
+-- Deduplication: only insert rows not already in the clean table
 WHERE (week, category, weekly_rank) NOT IN (
     SELECT week, category, weekly_rank
     FROM NETFLIX_WEEKLY_VIEWS
 )
-AND show_title IS NOT NULL   -- Skip any rows with missing titles
+AND show_title IS NOT NULL
 ;
 
 -- ============================================================
 -- Step 3: Log the data load
--- WHY: Always log what you did for audit purposes
--- Teaching: Production data pipelines ALWAYS have logging
+-- ============================================================
+-- Production data pipelines ALWAYS have logging for audit purposes.
+-- ============================================================
 
 INSERT INTO DATA_LOAD_LOG (
     source_file,
@@ -152,7 +127,6 @@ SELECT
     COUNT(*)                              AS rows_loaded,
     'SUCCESS'                             AS load_status,
     0                                     AS load_duration_seconds
-    -- NOTE: In production, you'd calculate actual duration
 FROM RAW_WEEKLY_VIEWS
 WHERE DATE(_loaded_at) = CURRENT_DATE()
 ;
@@ -160,10 +134,10 @@ WHERE DATE(_loaded_at) = CURRENT_DATE()
 -- ============================================================
 -- VERIFICATION QUERIES
 -- ============================================================
--- WHY: Always verify data loaded correctly
--- Teaching: Run these after loading to check your work
+-- Run these after loading to check your work.
+-- ============================================================
 
--- ---- Check 1: Row counts ----
+-- Row counts: RAW and CLEAN should be similar (~450 rows each)
 SELECT
     'RAW table' AS table_name,
     COUNT(*) AS row_count
@@ -179,10 +153,7 @@ SELECT
     COUNT(*) AS row_count
 FROM DATA_LOAD_LOG;
 
--- Expected: RAW and CLEAN should have similar row counts
--- Example: ~450 rows each (100 weeks × ~4-5 categories × top 10)
-
--- ---- Check 2: Data distribution by category ----
+-- Data distribution by category (expect 4 categories, 2025-11 to 2026-05)
 SELECT
     category,
     COUNT(*) AS total_rows,
@@ -192,9 +163,7 @@ FROM NETFLIX_WEEKLY_VIEWS
 GROUP BY category
 ORDER BY category;
 
--- Expected: 4 categories, each with data from 2025-11 to 2026-05
-
--- ---- Check 3: Sample data ----
+-- Sample data for most recent week (expect top 10 for each of 4 categories)
 SELECT
     week,
     category,
@@ -203,13 +172,11 @@ SELECT
     weekly_hours_viewed,
     weekly_views
 FROM NETFLIX_WEEKLY_VIEWS
-WHERE week = '2026-05-17'   -- Most recent week
+WHERE week = '2026-05-17'
 ORDER BY category, weekly_rank
 LIMIT 20;
 
--- Expected: Top 10 for each of the 4 categories
-
--- ---- Check 4: Load history ----
+-- Load history
 SELECT * FROM DATA_LOAD_LOG
 ORDER BY load_timestamp DESC
 LIMIT 5;

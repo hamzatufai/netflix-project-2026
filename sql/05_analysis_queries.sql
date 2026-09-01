@@ -17,17 +17,16 @@ USE WAREHOUSE ANALYTICS_WH;
 -- ============================================================
 -- QUERY 1: Top 10 Most Viewed Shows (All Time)
 -- ============================================================
--- WHY: The most basic "insight" — which content is most popular?
--- Teaching: Demonstrates ORDER BY and LIMIT
+-- The most basic "insight" — which content is most popular?
+-- Demonstrates GROUP BY, SUM, COUNT(DISTINCT), ORDER BY, LIMIT.
+-- ============================================================
 
 SELECT
     show_title,
     category,
     SUM(weekly_hours_viewed) AS total_hours_viewed,
-    -- WHY: SUM adds up hours across all weeks the show appeared
     SUM(weekly_views) AS total_views,
     COUNT(DISTINCT week) AS weeks_in_top_10
-    -- WHY: COUNT(DISTINCT) counts unique weeks (not total appearances)
 FROM NETFLIX_WEEKLY_VIEWS
 GROUP BY show_title, category
 ORDER BY total_hours_viewed DESC
@@ -36,8 +35,9 @@ LIMIT 10;
 -- ============================================================
 -- QUERY 2: Weekly Trend for a Specific Show
 -- ============================================================
--- WHY: Track how a show's popularity changes over time
--- Teaching: Demonstrates date functions and window-like analysis
+-- Track how a show's popularity changes over time.
+-- Demonstrates LAG() window function and percentage change calculation.
+-- ============================================================
 
 SELECT
     week,
@@ -45,19 +45,16 @@ SELECT
     weekly_rank,
     weekly_hours_viewed,
     weekly_views,
-    -- ---- Week-over-Week Change ----
-    -- WHY: Shows if viewership is growing or declining
-    -- Teaching: LAG() is a window function that looks at the previous row
+    -- Week-over-week change in hours viewed (uses LAG to look at previous row)
     weekly_hours_viewed - LAG(weekly_hours_viewed) OVER (
         ORDER BY week
     ) AS hours_change_from_previous_week,
-    -- Calculate percentage change
+    -- Percentage change (NULLIF prevents division by zero)
     ROUND(
         (weekly_hours_viewed - LAG(weekly_hours_viewed) OVER (ORDER BY week))
         * 100.0 / NULLIF(LAG(weekly_hours_viewed) OVER (ORDER BY week), 0),
         1
     ) AS pct_change
-    -- WHY: NULLIF prevents division by zero error
 FROM NETFLIX_WEEKLY_VIEWS
 WHERE show_title = 'Stranger Things'
   AND category = 'TV (English)'
@@ -66,27 +63,19 @@ ORDER BY week;
 -- ============================================================
 -- QUERY 3: Category Performance Summary
 -- ============================================================
--- WHY: Compare performance across the 4 Netflix categories
--- Teaching: Demonstrates GROUP BY with multiple aggregations
+-- Compare performance across the 4 Netflix categories.
+-- Demonstrates GROUP BY with multiple aggregations.
+-- ============================================================
 
 SELECT
     category,
     content_type,
     language_type,
     COUNT(DISTINCT show_title) AS unique_titles,
-    -- WHY: How many different shows appeared in top 10
-
     SUM(weekly_hours_viewed) AS total_hours_viewed,
-    -- WHY: Total engagement across all shows and weeks
-
     ROUND(AVG(weekly_hours_viewed), 0) AS avg_hours_per_entry,
-    -- WHY: Average engagement per entry (per show per week)
-
     ROUND(AVG(runtime), 2) AS avg_runtime_hours,
-    -- WHY: Average content length in hours
-
     MAX(cumulative_weeks_in_top_10) AS longest_streak_weeks
-    -- WHY: Longest any show stayed in the top 10
 FROM NETFLIX_WEEKLY_VIEWS
 GROUP BY category, content_type, language_type
 ORDER BY total_hours_viewed DESC;
@@ -94,26 +83,25 @@ ORDER BY total_hours_viewed DESC;
 -- ============================================================
 -- QUERY 4: Week-over-Week Category Trends
 -- ============================================================
--- WHY: See how each category's total viewership changes weekly
--- Teaching: Demonstrates window functions for running totals
+-- See how each category's total viewership changes weekly.
+-- Demonstrates window functions for running totals and ranking.
+-- ============================================================
 
 SELECT
     week,
     category,
     SUM(weekly_hours_viewed) AS weekly_category_hours,
-    -- Running total (cumulative sum up to this week)
+    -- Cumulative sum per category (PARTITION BY resets per category)
     SUM(SUM(weekly_hours_viewed)) OVER (
         PARTITION BY category
         ORDER BY week
         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
     ) AS cumulative_hours,
-    -- WHY: PARTITION BY resets the sum for each category
-    -- WHY: UNBOUNDED PRECEDING means "from the beginning"
+    -- Category rank each week
     RANK() OVER (
         PARTITION BY week
         ORDER BY SUM(weekly_hours_viewed) DESC
     ) AS category_rank_that_week
-    -- WHY: Which category was #1 each week?
 FROM NETFLIX_WEEKLY_VIEWS
 GROUP BY week, category
 ORDER BY week DESC, category_rank_that_week;
@@ -121,8 +109,9 @@ ORDER BY week DESC, category_rank_that_week;
 -- ============================================================
 -- QUERY 5: Biggest Drops from Rank 1
 -- ============================================================
--- WHY: Find shows that were #1 but then fell significantly
--- Teaching: Demonstrates self-joins and ranking
+-- Find shows that were #1 but then fell significantly.
+-- Demonstrates self-joins via CTEs and ranking.
+-- ============================================================
 
 WITH weekly_ranks AS (
     SELECT
@@ -144,7 +133,6 @@ SELECT
     previous_week_rank,
     weekly_rank AS current_rank,
     (weekly_rank - previous_week_rank) AS rank_drop,
-    -- WHY: Positive number = dropped in ranking
     CASE
         WHEN weekly_rank - previous_week_rank >= 5 THEN 'DROPPED SIGNIFICANTLY'
         WHEN weekly_rank - previous_week_rank >= 3 THEN 'dropped moderately'
@@ -152,22 +140,22 @@ SELECT
     END AS severity
 FROM weekly_ranks
 WHERE previous_week_rank IS NOT NULL
-  AND weekly_rank > previous_week_rank   -- Only show drops (rank got worse)
+  AND weekly_rank > previous_week_rank
 ORDER BY rank_drop DESC, week
 LIMIT 15;
 
 -- ============================================================
 -- QUERY 6: "Long Tail" Analysis — Shows That Stay Long
 -- ============================================================
--- WHY: Identify content with long-term staying power vs one-week wonders
--- Teaching: Demonstrates CASE WHEN for categorization
+-- Identify content with long-term staying power vs one-week wonders.
+-- Demonstrates CASE WHEN for categorization.
+-- ============================================================
 
 SELECT
     show_title,
     category,
     MAX(cumulative_weeks_in_top_10) AS total_weeks_in_top_10,
     SUM(weekly_hours_viewed) AS total_hours_viewed,
-    -- ---- Categorize longevity ----
     CASE
         WHEN MAX(cumulative_weeks_in_top_10) >= 20 THEN '🟢 MEGA HIT (20+ weeks)'
         WHEN MAX(cumulative_weeks_in_top_10) >= 10 THEN '🟡 STRONG (10-19 weeks)'
@@ -182,18 +170,15 @@ LIMIT 20;
 -- ============================================================
 -- QUERY 7: Monthly Summary (Aggregate by Month)
 -- ============================================================
--- WHY: See monthly patterns — when do people watch more?
--- Teaching: Demonstrates DATE_TRUNC for date grouping
+-- See monthly patterns — when do people watch more?
+-- Demonstrates DATE_TRUNC for date grouping.
+-- ============================================================
 
 SELECT
     DATE_TRUNC('MONTH', week) AS month,
-    -- WHY: DATE_TRUNC rounds down to the first day of the month
-    -- '2026-05-17' becomes '2026-05-01'
-
     COUNT(DISTINCT week) AS weeks_in_month,
     SUM(weekly_hours_viewed) AS total_hours_viewed,
     ROUND(SUM(weekly_hours_viewed) / 1e9, 2) AS total_hours_billions,
-    -- WHY: Divides by 1 billion for readability
     SUM(weekly_views) AS total_views,
     COUNT(DISTINCT show_title) AS unique_titles
 FROM NETFLIX_WEEKLY_VIEWS

@@ -16,129 +16,91 @@
 -- ============================================================
 
 -- ---- Set Context ----
-USE ROLE SECURITYADMIN;
--- WHY: Creating integrations requires SECURITYADMIN or ACCOUNTADMIN role
--- Teaching: Different operations need different roles:
---   SYSADMIN    → create databases, tables, warehouses
+-- Different operations need different roles:
+--   SYSADMIN      → create databases, tables, warehouses
 --   SECURITYADMIN → create integrations, manage access
---   ACCOUNTADMIN → everything (use sparingly)
-
+--   ACCOUNTADMIN  → everything (use sparingly)
+USE ROLE SECURITYADMIN;
 USE DATABASE ANALYTICS_DB;
 USE SCHEMA NETFLIX_SCHEMA;
 
 -- ============================================================
 -- STEP 1: CREATE STORAGE INTEGRATION
 -- ============================================================
--- WHY: This tells Snowflake which AWS IAM role to trust
--- Teaching: Think of this as a "handshake" between Snowflake and AWS.
---   Snowflake stores the IAM role ARN and an external ID.
---   When Snowflake accesses S3, AWS verifies this trust relationship.
+-- This tells Snowflake which AWS IAM role to trust. Think of it as
+-- a "handshake" between Snowflake and AWS. Snowflake stores the IAM
+-- role ARN and an external ID. When Snowflake accesses S3, AWS
+-- verifies this trust relationship.
+-- ============================================================
 
 CREATE OR REPLACE STORAGE INTEGRATION netflix_s3_integration
     TYPE = EXTERNAL_STAGE
-    -- TYPE: EXTERNAL_STAGE means "data lives outside Snowflake" (in S3)
-
     ENABLED = TRUE
-    -- WHY: Must be TRUE for the integration to work
-
     STORAGE_PROVIDER = S3
-    -- WHY: We're using AWS S3 (other options: AZURE, GCS)
-
     STORAGE_AWS_ROLE_ARN = 'YOUR_IAM_ROLE_ARN'
     -- !! REPLACE THIS !!
-    -- Get this from: terraform output snowflake_role_arn
+    -- Get from: terraform output snowflake_role_arn
     -- Example: 'arn:aws:iam::123456789012:role/snowflake-s3-reader-dev'
-
     STORAGE_AWS_EXTERNAL_ID = 'NETFLIX_PIPELINE_dev'
-    -- WHY: This matches the Condition in the IAM role's trust policy
-    -- Teaching: External IDs are a security mechanism to prevent
-    --   "confused deputy" attacks (where a bad actor tricks AWS into
-    --   assuming a role they shouldn't have access to)
-
+    -- Matches the Condition in the IAM role's trust policy.
+    -- External IDs prevent "confused deputy" attacks.
     COMMENT = 'Integration between Snowflake and S3 for Netflix data pipeline';
 
--- ---- GRANT ACCESS ----
--- WHY: The integration is created, but USAGE needs to be granted
--- Teaching: In Snowflake, creating an object ≠ being able to use it.
---   You must explicitly GRANT access to roles that need it.
+-- Grant USAGE so SYSADMIN can actually use this integration.
+-- In Snowflake, creating an object ≠ being able to use it.
 GRANT USAGE ON INTEGRATION netflix_s3_integration TO ROLE SYSADMIN;
 
 -- ============================================================
 -- STEP 2: CREATE EXTERNAL STAGE
 -- ============================================================
--- WHY: The stage is a "pointer" to the S3 folder where CSV files live
--- Teaching: Think of a stage as a "loading dock" — data waits here
---   before being pulled into tables via COPY INTO.
+-- The stage is a "pointer" to the S3 folder where CSV files live.
+-- Think of a stage as a "loading dock" — data waits here before
+-- being pulled into tables via COPY INTO.
+-- ============================================================
 
 CREATE OR REPLACE STAGE netflix_s3_stage
     URL = 's3://netflix_2026/weekly-data/'
     -- !! REPLACE BUCKET NAME if different !!
-    -- Get this from: terraform output bucket_name
-    -- The URL format is: s3://<bucket-name>/<folder-path>/
-
+    -- Get from: terraform output bucket_name
     STORAGE_INTEGRATION = netflix_s3_integration
-    -- WHY: Links this stage to the integration we just created
-    -- Without this, Snowflake wouldn't know which IAM role to use
-
     FILE_FORMAT = (
         TYPE = 'CSV'
-        -- WHY: Our Netflix data files are CSV format
-
         FIELD_OPTIONALLY_ENCLOSED_BY = '"'
-        -- WHY: Some fields contain commas (like show titles with quotes)
-        -- This tells Snowflake to treat quoted strings as single fields
-
         SKIP_HEADER = 1
-        -- WHY: The first row of our CSV is column headers, not data
-        -- This skips the header row during loading
-
         NULL_IF = ('', 'N/A', 'null', 'NULL')
-        -- WHY: The CSV uses "N/A" for null values (like season_title for films)
-        -- This converts them to actual SQL NULLs
-
         ERROR_ON_COLUMN_COUNT_MISMATCH = FALSE
-        -- WHY: If a row has extra columns, don't fail — just ignore extras
-        -- Teaching: Useful during development when CSV format might change
-
         TRIM_SPACE = TRUE
-        -- WHY: Remove leading/trailing spaces from field values
-        -- Prevents issues like " Netflix" vs "Netflix"
-
         EMPTY_FIELD_AS_NULL = TRUE
-        -- WHY: Empty strings become NULL instead of empty strings
-        -- Better for data analysis (NULL means "no value")
     )
     COMMENT = 'External stage pointing to Netflix CSV files in S3';
 
--- ---- GRANT ACCESS ----
+-- File format reference:
+--   FIELD_OPTIONALLY_ENCLOSED_BY = '"'  — Handle commas inside quoted fields
+--   SKIP_HEADER = 1                     — Skip CSV column headers
+--   NULL_IF = (...)                    — Convert 'N/A', '' etc. to SQL NULL
+--   ERROR_ON_COLUMN_COUNT_MISMATCH = FALSE — Don't fail on extra columns
+--   TRIM_SPACE = TRUE                  — Remove leading/trailing spaces
+--   EMPTY_FIELD_AS_NULL = TRUE         — Empty strings become NULL
+
 GRANT USAGE ON STAGE netflix_s3_stage TO ROLE SYSADMIN;
 
 -- ============================================================
 -- STEP 3: VERIFY THE CONNECTION
 -- ============================================================
--- WHY: Test that Snowflake can actually see files in your S3 bucket
--- Teaching: Always verify before loading data. This saves debugging time.
+-- Always verify before loading data. This saves debugging time.
+-- ============================================================
 
--- List files in the stage (should show your CSV files)
 LIST @netflix_s3_stage;
--- Expected output: A list of CSV files with sizes and timestamps
--- Example:
---   weekly-data/2026-05-25_global_weekly.csv  45231  ...
---   weekly-data/2026-05-18_global_weekly.csv  44102  ...
+-- Expected: A list of CSV files with sizes and timestamps
 
 -- ============================================================
 -- STEP 4: TEST DATA PREVIEW (Optional but recommended)
 -- ============================================================
--- WHY: Preview the CSV data BEFORE loading to catch format issues
--- Teaching: This is like "looking before you leap"
+-- Preview the CSV data BEFORE loading to catch format issues.
+-- ============================================================
 
--- Preview first 5 rows from the CSV
-SELECT *
-FROM @netflix_s3_stage
-LIMIT 5;
--- Expected output: 5 rows of Netflix data with all columns
+SELECT * FROM @netflix_s3_stage LIMIT 5;
 
--- Preview with column mapping (verify columns align)
 SELECT
     $1::DATE        AS week,
     $2::VARCHAR     AS category,
