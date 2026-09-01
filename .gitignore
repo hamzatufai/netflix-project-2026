@@ -1,0 +1,53 @@
+# ============================================================
+# .gitignore — Netflix Pipeline Project
+# Purpose: Keep sensitive files and local state out of Git
+# ============================================================
+
+# ---- Terraform State & Lock Files (NEVER commit these) ----
+*.tfstate
+*.tfstate.backup
+*.tfstate.*.backup
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+crash.log
+
+# ---- Terraform Variable Files with Secrets ----
+terraform.tfvars        # Contains actual AWS keys, Snowflake passwords
+*.auto.tfvars           # Auto-loaded vars with secrets
+
+# ---- Credentials & Secrets ----
+*.pem
+*.key
+*.cert
+*.env
+.env.*
+credentials.json
+aws-credentials.json
+snowflake_credentials.json
+
+# ---- Python Cache (if scripts added later) ----
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# ---- Data Files (too large for Git) ----
+data/*.csv
+data/*.json
+data/*.parquet
+data/*.xlsx
+
+# ---- OS & Editor Files ----
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- Logs ----
+*.log
+logs/
