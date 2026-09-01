@@ -38,7 +38,7 @@ variable "bucket_name" {
 
 # ---- Snowflake Account URL ----
 variable "snowflake_account_url" {
-  description = "Snowflake account URL (e.g., https://JUMPDED-DTC83219.snowflakecomputing.com)"
+  description = "Snowflake account URL (e.g., https://abc1234.snowflakecomputing.com)"
   type        = string
   sensitive   = true   # Hides value in terraform plan output
 }
