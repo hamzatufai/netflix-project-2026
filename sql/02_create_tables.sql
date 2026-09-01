@@ -68,34 +68,56 @@ COMMENT ON TABLE RAW_WEEKLY_VIEWS IS
 -- ============================================================
 
 CREATE OR REPLACE TABLE NETFLIX_WEEKLY_VIEWS (
-    view_id                 INTEGER         AUTOINCREMENT  PRIMARY KEY,
-    week                    DATE            NOT NULL,
-    category                VARCHAR(50)     NOT NULL,
-    weekly_rank             INTEGER         NOT NULL,
-    show_title              VARCHAR(500)    NOT NULL,
-    season_title            VARCHAR(500)    NULL,
-    weekly_hours_viewed     BIGINT          NOT NULL,
-    runtime                 DECIMAL(10,4)   NOT NULL,
-    weekly_views            BIGINT          NOT NULL,
-    cumulative_weeks_in_top_10  INTEGER     NOT NULL,
-    -- Derived columns: auto-extract content_type and language_type from category
-    content_type            VARCHAR(20)     GENERATED ALWAYS AS (
-        CASE
-            WHEN category LIKE 'Films%' THEN 'Films'
-            WHEN category LIKE 'TV%'    THEN 'TV'
-            ELSE 'Unknown'
-        END
-    ) STORED,
-    language_type           VARCHAR(20)     GENERATED ALWAYS AS (
-        CASE
-            WHEN category LIKE '%English%' AND category NOT LIKE '%Non-English%' THEN 'English'
-            WHEN category LIKE '%Non-English%' THEN 'Non-English'
-            ELSE 'Unknown'
-        END
-    ) STORED,
-    _loaded_at              TIMESTAMP_NTZ   DEFAULT CURRENT_TIMESTAMP(),
-    _transformed_at         TIMESTAMP_NTZ   NULL,
-    _load_source            VARCHAR(100)    DEFAULT 'RAW_WEEKLY_VIEWS'
+    view_id INTEGER AUTOINCREMENT PRIMARY KEY,
+
+    week DATE NOT NULL,
+
+    category VARCHAR(50) NOT NULL,
+
+    weekly_rank INTEGER NOT NULL,
+
+    show_title VARCHAR(500) NOT NULL,
+
+    season_title VARCHAR(500),
+
+    weekly_hours_viewed BIGINT NOT NULL,
+
+    runtime DECIMAL(10,4) NOT NULL,
+
+    weekly_views BIGINT NOT NULL,
+
+    cumulative_weeks_in_top_10 INTEGER NOT NULL,
+
+    -- Derived column: content type
+    content_type VARCHAR(20)
+        AS (
+            CASE
+                WHEN category LIKE 'Films%' THEN 'Films'
+                WHEN category LIKE 'TV%' THEN 'TV'
+                ELSE 'Unknown'
+            END
+        ),
+
+    -- Derived column: language type
+    language_type VARCHAR(20)
+        AS (
+            CASE
+                WHEN category LIKE '%English%'
+                     AND category NOT LIKE '%Non-English%'
+                    THEN 'English'
+
+                WHEN category LIKE '%Non-English%'
+                    THEN 'Non-English'
+
+                ELSE 'Unknown'
+            END
+        ),
+
+    _loaded_at TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP(),
+
+    _transformed_at TIMESTAMP_NTZ,
+
+    _load_source VARCHAR(100) DEFAULT 'RAW_WEEKLY_VIEWS'
 );
 
 -- Column reference:

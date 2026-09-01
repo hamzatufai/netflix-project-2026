@@ -1,13 +1,20 @@
 # ============================================================
+
 # Project Structure — Netflix Data Pipeline
-# ============================================================
-# Purpose: Detailed breakdown of every folder and file
-# Teaching Note: Understanding the project structure is like
-#   knowing the layout of a kitchen before cooking. Each folder
-#   has a specific purpose, and files follow naming conventions
-#   so you always know where to find things.
+
 # ============================================================
 
+# Purpose: Detailed breakdown of every folder and file
+
+# Teaching Note: Understanding the project structure is like
+
+# knowing the layout of a kitchen before cooking. Each folder
+
+# has a specific purpose, and files follow naming conventions
+
+# so you always know where to find things.
+
+# ============================================================
 
 ## Project Root
 
@@ -24,7 +31,6 @@ netflix-pipeline/
 │
 └── (folders listed below)
 ```
-
 
 ## Folder: terraform/
 
@@ -62,7 +68,6 @@ terraform/
     └── Teaching: Never commit terraform.tfvars — it has your AWS keys!
 ```
 
-
 ## Folder: sql/
 
 ```
@@ -99,7 +104,6 @@ sql/
     └── Teaching: Each query demonstrates a different SQL technique
 ```
 
-
 ## Folder: scripts/
 
 ```
@@ -112,7 +116,6 @@ scripts/
     └── Teaching: Always validate data before uploading. Errors caught early save debugging time.
 ```
 
-
 ## Folder: data/
 
 ```
@@ -124,7 +127,6 @@ data/
     ├── Note: This folder is in .gitignore — files are NOT committed to Git
     └── Teaching: Data files are often large and contain business data. Keep them out of version control.
 ```
-
 
 ## Folder: docs/
 
@@ -144,12 +146,13 @@ docs/
     └── Teaching: Good documentation saves hours of reading code to understand structure
 ```
 
-
 ## Execution Order (How to Run Everything)
 
 ```
 STEP    COMMAND                              WHAT IT DOES
 ─────   ──────────────────────────────────   ──────────────────────────────────────
+ //     source .env                          loads your AWS credentials/settings into the terminal
+ //     aws sts get-caller-identity          checks whether AWS can authenticate you
   1     cd terraform/                        Navigate to terraform folder
   2     cp terraform.tfvars.example          Create your variable values file
           terraform.tfvars
@@ -170,7 +173,6 @@ STEP    COMMAND                              WHAT IT DOES
   17    Run sql/04_load_data.sql            Load CSV data into tables
   18    Run sql/05_analysis_queries.sql     Start analyzing your data!
 ```
-
 
 ## Key Naming Conventions
 
